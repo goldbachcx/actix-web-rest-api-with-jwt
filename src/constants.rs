@@ -25,7 +25,7 @@ pub const AUTHORIZATION: &str = "Authorization";
 pub const EMPTY: &str = "";
 
 // ignore routes
-pub const IGNORE_ROUTES: [&str; 3] = ["/api/ping", "/api/auth/signup", "/api/auth/login"];
+pub const IGNORE_ROUTES: [&str; 4] = ["/static", "/api/ping", "/api/auth/signup", "/api/auth/login"];
 
 // Default number of items per page
 pub const DEFAULT_PER_PAGE: i64 = 10;

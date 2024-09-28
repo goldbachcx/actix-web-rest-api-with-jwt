@@ -8,6 +8,7 @@ use actix_web::dev::Service;
 use actix_web::web;
 use actix_web::{http, App, HttpServer};
 use futures::FutureExt;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 
 mod api;
 mod config;
@@ -26,19 +27,28 @@ async fn main() -> io::Result<()> {
     env_logger::init();
 
     let app_host = env::var("APP_HOST").expect("APP_HOST not found.");
-    let app_port = env::var("APP_PORT").expect("APP_PORT not found.");
-    let app_url = format!("{}:{}", &app_host, &app_port);
+    let http_port = env::var("HTTP_PORT").expect("HTTP_PORT not found.");
+    let https_port = env::var("HTTPS_PORT").expect("HTTPS_PORT not found.");
+    let allowed_origin = env::var("ALLOWED_ORIGIN").expect("ALLOWED_ORIGIN not found.");
+    let http_url = format!("{}:{}", &app_host, &http_port);
+    let https_url = format!("{}:{}", &app_host, &https_port);
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL not found.");
 
     let pool = config::db::init_db_pool(&db_url);
     config::db::run_migration(&mut pool.get().unwrap());
 
+    // 创建 SSL/TLS 接受器
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder.set_private_key_file("security/private.key", SslFiletype::PEM).unwrap();
+    builder.set_certificate_chain_file("security/cert.pem").unwrap();
+
     HttpServer::new(move || {
         App::new()
             .wrap(
                 Cors::default() // allowed_origin return access-control-allow-origin: * by default
-                    .allowed_origin("http://127.0.0.1:3000")
-                    .allowed_origin("http://localhost:3000")
+                    .allowed_origin(&format!("{}:{}", "http://127.0.0.1", &http_port))
+                    .allowed_origin(&format!("{}:{}", "http://localhost", &https_port))
+                    .allowed_origin(&allowed_origin)
                     .send_wildcard()
                     .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
                     .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
@@ -51,9 +61,10 @@ async fn main() -> io::Result<()> {
             .wrap_fn(|req, srv| srv.call(req).map(|res| res))
             .configure(config::app::config_services)
     })
-    .bind(&app_url)?
-    .run()
-    .await
+        .bind(&http_url)?
+        .bind_openssl(&https_url, builder)?  // HTTPS 监听端口
+        .run()
+        .await
 }
 
 #[cfg(test)]
@@ -77,7 +88,7 @@ mod tests {
                 "postgres://postgres:postgres@127.0.0.1:{}/postgres",
                 postgres.get_host_port_ipv4(5432)
             )
-            .as_str(),
+                .as_str(),
         );
         config::db::run_migration(&mut pool.get().unwrap());
 
@@ -98,9 +109,9 @@ mod tests {
                 .wrap_fn(|req, srv| srv.call(req).map(|res| res))
                 .configure(config::app::config_services)
         })
-        .bind("localhost:8000".to_string())
-        .unwrap()
-        .run();
+            .bind("localhost:8000".to_string())
+            .unwrap()
+            .run();
 
         assert_eq!(true, true);
     }
@@ -114,7 +125,7 @@ mod tests {
                 "postgres://postgres:postgres@127.0.0.1:{}/postgres",
                 postgres.get_host_port_ipv4(5432)
             )
-            .as_str(),
+                .as_str(),
         );
         config::db::run_migration(&mut pool.get().unwrap());
 
@@ -134,9 +145,9 @@ mod tests {
                 .wrap_fn(|req, srv| srv.call(req).map(|res| res))
                 .configure(config::app::config_services)
         })
-        .bind("localhost:8001".to_string())
-        .unwrap()
-        .run();
+            .bind("localhost:8001".to_string())
+            .unwrap()
+            .run();
 
         assert_eq!(true, true);
     }

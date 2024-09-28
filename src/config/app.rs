@@ -1,4 +1,7 @@
-use actix_web::web;
+use std::path::PathBuf;
+use actix_files::{Files, NamedFile};
+use actix_web::{http, web};
+use dotenv::Error;
 use log::info;
 
 use crate::api::*;
@@ -41,5 +44,9 @@ pub fn config_services(cfg: &mut web::ServiceConfig) {
                             .route(web::get().to(address_book_controller::filter)),
                     ),
             ),
+    );
+    cfg.service(Files::new("/static", "./resources").use_last_modified(true)  // 启用 Last-Modified 头
+                    .use_etag(true)           // 启用 ETag 头
+                    .prefer_utf8(true)        // 使用 UTF-8
     );
 }
